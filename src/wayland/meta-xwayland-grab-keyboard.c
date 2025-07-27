@@ -50,6 +50,12 @@ meta_xwayland_keyboard_grab_key (MetaWaylandKeyboardGrab *grab,
   MetaXwaylandKeyboardActiveGrab *active_grab;
   MetaWaylandKeyboard *keyboard;
 
+  /* --- BEGIN DEBUG CODE --- */
+  g_warning("XWAYLAND GRAB KEY: hardware_keycode=%d, keyval=0x%x, type=%d",
+            event->key.hardware_keycode, event->key.keyval, event->type);
+  /* --- END DEBUG CODE --- */
+
+
   active_grab = wl_container_of (grab, active_grab, keyboard_grab);
   keyboard = active_grab->keyboard_grab.keyboard;
 
@@ -332,3 +338,6 @@ meta_xwayland_grab_keyboard_init (MetaWaylandCompositor *compositor)
                             NULL,
                             bind_keyboard_grab) != NULL);
 }
+
+
+
