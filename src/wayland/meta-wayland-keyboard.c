@@ -409,37 +409,43 @@ notify_modifiers (MetaWaylandKeyboard *keyboard)
                                         xkb_state_serialize_mods (state, XKB_STATE_MODS_EFFECTIVE));
 }
 
-void
-meta_wayland_keyboard_update (MetaWaylandKeyboard *keyboard,
-                              const ClutterKeyEvent *event)
+static void
+meta_wayland_keyboard_update_xkb_state (MetaWaylandKeyboard *keyboard)
 {
-  gboolean is_press = event->type == CLUTTER_KEY_PRESS;
+  MetaWaylandXkbInfo *xkb_info = &keyboard->xkb_info;
+  xkb_mod_mask_t latched, locked, numlock;
+  MetaBackend *backend = meta_get_backend ();
+  xkb_layout_index_t layout_idx;
+  ClutterKeymap *keymap;
+  ClutterSeat *seat;
 
-  /* --- BEGIN DEBUG CODE --- */
-  g_warning("KEYBOARD UPDATE: hardware_keycode=%d, keyval=0x%x, is_press=%d",
-            event->hardware_keycode, event->keyval, is_press);
-  /* --- END DEBUG CODE --- */
+  /* Preserve latched/locked modifiers state */
+  if (xkb_info->state)
+    {
+      latched = xkb_state_serialize_mods (xkb_info->state, XKB_STATE_MODS_LATCHED);
+      locked = xkb_state_serialize_mods (xkb_info->state, XKB_STATE_MODS_LOCKED);
+      xkb_state_unref (xkb_info->state);
+    }
+  else
+    {
+      latched = locked = 0;
+    }
 
+  seat = clutter_backend_get_default_seat (clutter_get_default_backend ());
+  keymap = clutter_seat_get_keymap (seat);
+  numlock = (1 <<  xkb_keymap_mod_get_index (xkb_info->keymap, "Mod2"));
 
-  /* Only handle real, non-synthetic, events here. The IM is free to reemit
-   * key events (incl. modifiers), handling those additionally will result
-   * in doubly-pressed keys.
-   */
-  if ((event->flags &
-       (CLUTTER_EVENT_FLAG_SYNTHETIC | CLUTTER_EVENT_FLAG_INPUT_METHOD)) != 0)
-    return;
+  if (clutter_keymap_get_num_lock_state (keymap))
+    locked |= numlock;
+  else
+    locked &= ~numlock;
 
-  /* If we get a key event but still have pending modifier state
-   * changes from a previous event that didn't get cleared, we need to
-   * send that state right away so that the new key event can be
-   * interpreted by clients correctly modified. */
-  if (keyboard->mods_changed)
-    notify_modifiers (keyboard);
+  xkb_info->state = xkb_state_new (xkb_info->keymap);
 
-  keyboard->mods_changed = xkb_state_update_key (keyboard->xkb_info.state,
-                                                 event->hardware_keycode,
-                                                 is_press ? XKB_KEY_DOWN : XKB_KEY_UP);
-  keyboard->mods_changed |= kbd_a11y_apply_mask (keyboard);
+  layout_idx = meta_backend_get_keymap_layout_group (backend);
+  xkb_state_update_mask (xkb_info->state, 0, latched, locked, 0, 0, layout_idx);
+
+  kbd_a11y_apply_mask (keyboard);
 }
 
 static void
@@ -632,6 +638,12 @@ meta_wayland_keyboard_update (MetaWaylandKeyboard *keyboard,
                               const ClutterKeyEvent *event)
 {
   gboolean is_press = event->type == CLUTTER_KEY_PRESS;
+
+  /* --- BEGIN DEBUG CODE --- */
+  g_warning("KEYBOARD UPDATE: hardware_keycode=%d, keyval=0x%x, is_press=%d",
+            event->hardware_keycode, event->keyval, is_press);
+  /* --- END DEBUG CODE --- */
+
 
   /* Only handle real, non-synthetic, events here. The IM is free to reemit
    * key events (incl. modifiers), handling those additionally will result
