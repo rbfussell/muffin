@@ -634,6 +634,7 @@ evdev_code (const ClutterKeyEvent *event)
 }
 
 void
+void
 meta_wayland_keyboard_update (MetaWaylandKeyboard *keyboard,
                               const ClutterKeyEvent *event)
 {
